@@ -27,6 +27,7 @@
     ```text
     [{'username':'replace_with_your_username','password':'replace_with_your_password'}]
     ```
+    用户名一般是邮箱，就是你登录的时候填的那个东东
     <details>
     <summary>具体操作展开查看</summary>
     
@@ -59,7 +60,10 @@
     ![](screenshots/repo_action_4.png)
     </details>
 
-### github action with docker
+* 好用请给个星
+  ![](screenshots/star.png)
+
+### github action with docker 模式
 
 * 随便选（建）一个github repo
 
