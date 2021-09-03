@@ -3,6 +3,7 @@ import json
 import hashlib
 from raw_requests import *
 import sys
+from twocaptcha import TwoCaptcha
 
 
 # 签到流程
@@ -44,60 +45,102 @@ def get_verify_code(id_hash) -> str:
 	return verify_code
 
 
-# 如果 login 失败, 后面的操作没必要再做，直接 exit
-def daily_login(username: str, password_hashed: str):
+def get_g_token(api_key: str, url: str, site_key: str = '6LeCeskbAAAAAE-5ns6vBXkLrcly-kgyq6uAriBR') -> str:
+	solver = TwoCaptcha(api_key)
+	try:
+		result = solver.solve_captcha(
+			site_key=site_key,
+			page_url=url)
+
+	except Exception as e:
+		print(e)
+		exit(-1)
+		return ""
+	else:
+		print('solved: ' + str(result))
+		return result
+
+
+def daily_login_v2(api_key: str, username: str, password: str):
 	print("do login...")
-	form_hash, login_hash = get_login_info_()
+	csrf_token = get_login_info_v2()
+	if csrf_token == "":
+		print("wrong csrf_token")
+		exit(-1)
 	time.sleep(2)
-	if form_hash == "" or login_hash == "":
+	code = get_g_token(api_key, "https://auth.1point3acres.com/", login_site_key_v2)
+	if code == "":
+		return False
+	print(csrf_token)
+	print(code)
+	return login_v2(username, password, csrf_token, code)
+
+
+# 如果 login 失败, 后面的操作没必要再做，直接 exit
+def daily_login(api_key: str, username: str, password_hashed: str):
+	print("do login...")
+	form_hash, login_hash, sec_hash = get_login_info_()
+	time.sleep(2)
+	if form_hash == "" or login_hash == "" or sec_hash == "":
 		print("wrong login info")
 		exit(-1)
-	return login(username, password_hashed, form_hash, login_hash)
+	url = login_url % login_hash
+	code = get_g_token(api_key, "https://www.1point3acres.com/bbs/")
+	# code = get_g_token(api_key, get_login_url)
+	# code = get_g_token(api_key, url)
+	if code == "":
+		return False
+	return login(username, password_hashed, form_hash, login_hash, sec_hash, code)
 
 
-def daily_checkin() -> bool:
+def daily_checkin(api_key: str) -> bool:
 	print("do daily checkin...")
 	form_hash, sec_hash = get_checkin_info_()
 	time.sleep(2)
 	if form_hash == "":
 		return False
-	code = get_verify_code(sec_hash)
+	code = get_g_token(api_key, get_checkin_url,other_site_key)
 	if code == "":
 		return False
-	return do_daily_checkin_(verify_code=code, form_hash=form_hash, sec_hash=sec_hash)
+	return do_daily_checkin_(g_token=code, form_hash=form_hash, sec_hash=sec_hash)
 
 
-def daily_question() -> bool:
+def daily_question(api_key: str) -> bool:
 	print("do daily question...")
 	answer, form_hash, sec_hash, = get_daily_task_answer()
 	time.sleep(2)
 	if form_hash == "" or answer == "":
 		return False
-	code = get_verify_code(sec_hash)
+	code = get_g_token(api_key, get_checkin_url)
 	if code == "":
 		return False
-	return do_daily_question_(answer=answer, verify_code=code, form_hash=form_hash, sec_hash=sec_hash)
+	return do_daily_question_(answer=answer, g_token=code, form_hash=form_hash, sec_hash=sec_hash)
 
 
-def do_all(username: str, password: str):
+def do_all(username: str, password: str, api_key: str):
 	print(f"for user: {username[:3]}...{username[-2:]}")
-	daily_login(username, password)
-	daily_checkin()
-	daily_question()
+	daily_login(api_key, username, password)
+	daily_checkin(api_key)
+	daily_question(api_key)
 	return
 
 
 def main(from_file: bool = False):
 	users = []
+	api_key = ""
 	if from_file or len(sys.argv) == 1:
 		fp = open("../configure/data.json")
-		users = json.load(fp)
+		data = json.load(fp)
+		users = data["users"]
+		api_key = data["api_key"]
 	else:
-		users = json.loads(sys.argv[1].replace("'", '"'))
+		api_key = sys.argv[1]
+		users = json.loads(sys.argv[2].replace("'", '"'))
 	for user in users:
 		m = hashlib.md5()
 		m.update(user["password"].encode("ascii"))
-		do_all(user["username"], m.hexdigest())
+		do_all(user["username"], m.hexdigest(), api_key)
+		#do_all(user["username"], user["password"], api_key)
 
 
 if __name__ == "__main__":
